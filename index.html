@@ -1,26 +1,14 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Ultimate Trading App</title>
-
-  <!-- TradingView -->
+  <title>Pro Trading Platform</title>
   <script src="https://s3.tradingview.com/tv.js"></script>
-
-  <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
   <style>
     body {
       margin: 0;
       font-family: Arial;
       background: #0f172a;
       color: white;
-      transition: 0.3s;
-    }
-
-    .light {
-      background: #f3f4f6;
-      color: black;
     }
 
     header {
@@ -28,11 +16,6 @@
       background: #1e293b;
       display: flex;
       justify-content: space-between;
-      align-items: center;
-    }
-
-    .wallet {
-      font-weight: bold;
     }
 
     .container {
@@ -40,38 +23,28 @@
     }
 
     .price {
-      font-size: 30px;
+      font-size: 28px;
       margin: 10px 0;
-      transition: 0.3s;
     }
 
-    .green { color: #22c55e; }
-    .red { color: #ef4444; }
-
-    button {
-      padding: 10px 15px;
-      border: none;
-      border-radius: 8px;
-      margin: 5px;
-      cursor: pointer;
-      transition: 0.3s;
-      font-weight: bold;
-    }
-
-    button:hover {
-      transform: scale(1.1);
-    }
-
-    .buy { background: #16a34a; color: white; }
-    .sell { background: #dc2626; color: white; }
-    .mode { background: #3b82f6; color: white; }
-
-    input {
+    input, select {
       padding: 8px;
       margin: 5px;
       border-radius: 5px;
       border: none;
     }
+
+    button {
+      padding: 8px 15px;
+      margin: 5px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .buy { background: #16a34a; color: white; }
+    .sell { background: #dc2626; color: white; }
 
     .panel {
       margin-top: 20px;
@@ -80,173 +53,174 @@
       border-radius: 10px;
     }
 
-    .light .panel {
-      background: white;
-    }
-
     table {
       width: 100%;
-      margin-top: 10px;
       border-collapse: collapse;
     }
 
     th, td {
       padding: 8px;
-      text-align: center;
       border-bottom: 1px solid gray;
+      text-align: center;
     }
 
     #tv_chart {
-      height: 400px;
+      height: 450px;
       margin-top: 20px;
     }
   </style>
 </head>
-
 <body>
 
 <header>
-  <h2>Ultimate Trading App</h2>
-  <div class="wallet">
-    Balance: ₹ <span id="balance">10000</span>
-  </div>
-  <button class="mode" onclick="toggleMode()">Dark/Light</button>
+  <h2>Pro Trading App</h2>
+  <div>Balance: $ <span id="balance">10000</span></div>
 </header>
 
 <div class="container">
 
-  <div class="price" id="price">₹ 500.00</div>
+  <div class="price">BTC Price: $ <span id="price">Loading...</span></div>
 
-  <input type="number" id="amount" placeholder="Amount" value="1">
-  <input type="number" id="leverage" placeholder="Leverage (x)" value="1">
-  <input type="number" id="sl" placeholder="Stop Loss">
-  <input type="number" id="tp" placeholder="Take Profit">
+  <select id="type">
+    <option value="long">Long</option>
+    <option value="short">Short</option>
+  </select>
 
-  <br>
+  <input type="number" id="amount" placeholder="Amount ($)" value="100">
+  <input type="number" id="leverage" placeholder="Leverage" value="5">
 
-  <button class="buy" onclick="trade('buy')">Buy</button>
-  <button class="sell" onclick="trade('sell')">Sell</button>
+  <button class="buy" onclick="openTrade()">Open Trade</button>
 
   <div class="panel">
-    <h3>Order History</h3>
+    <h3>Open Positions</h3>
     <table>
       <thead>
         <tr>
           <th>Type</th>
-          <th>Price</th>
-          <th>Amount</th>
+          <th>Entry</th>
           <th>Leverage</th>
+          <th>Margin</th>
+          <th>PnL</th>
+          <th>Liquidation</th>
+          <th>Action</th>
         </tr>
       </thead>
-      <tbody id="history"></tbody>
+      <tbody id="positions"></tbody>
     </table>
   </div>
 
-  <!-- TradingView Chart -->
   <div id="tv_chart"></div>
 
 </div>
 
-<audio id="soundBuy" src="https://www.soundjay.com/buttons/sounds/button-09.mp3"></audio>
-<audio id="soundSell" src="https://www.soundjay.com/buttons/sounds/button-10.mp3"></audio>
-
 <script>
+let balance = 10000;
+let price = 0;
+let positions = [];
 
-let balance = localStorage.getItem("balance") 
-  ? parseFloat(localStorage.getItem("balance")) 
-  : 10000;
+const priceEl = document.getElementById("price");
+const balanceEl = document.getElementById("balance");
+const positionsEl = document.getElementById("positions");
 
-document.getElementById("balance").innerText = balance.toFixed(2);
-
-let price = 500;
-
-function updatePrice() {
-  let change = (Math.random() - 0.5) * 10;
-  price += change;
-  price = parseFloat(price.toFixed(2));
-
-  let priceEl = document.getElementById("price");
-  priceEl.innerText = "₹ " + price;
-  priceEl.className = change >= 0 ? "price green" : "price red";
-
-  checkSLTP();
+async function fetchPrice() {
+  const res = await fetch("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT");
+  const data = await res.json();
+  price = parseFloat(data.price);
+  priceEl.innerText = price.toFixed(2);
+  updatePnL();
 }
 
-setInterval(updatePrice, 2000);
+setInterval(fetchPrice, 2000);
+fetchPrice();
 
-function trade(type) {
-  let amount = parseFloat(document.getElementById("amount").value);
-  let leverage = parseFloat(document.getElementById("leverage").value);
+function openTrade() {
+  const type = document.getElementById("type").value;
+  const margin = parseFloat(document.getElementById("amount").value);
+  const leverage = parseFloat(document.getElementById("leverage").value);
 
-  if (!amount || amount <= 0) {
-    alert("Enter valid amount");
-    return;
-  }
-
-  let cost = price * amount;
-
-  if (type === "buy" && balance < cost) {
+  if (margin > balance) {
     alert("Insufficient Balance");
     return;
   }
 
-  if (type === "buy") {
-    balance -= cost;
-    document.getElementById("soundBuy").play();
-  } else {
-    balance += cost;
-    document.getElementById("soundSell").play();
-  }
+  const liquidation = type === "long"
+    ? price - (price / leverage)
+    : price + (price / leverage);
 
-  localStorage.setItem("balance", balance);
-  document.getElementById("balance").innerText = balance.toFixed(2);
+  balance -= margin;
+  balanceEl.innerText = balance.toFixed(2);
 
-  addHistory(type, price, amount, leverage);
+  positions.push({
+    type,
+    entry: price,
+    leverage,
+    margin,
+    liquidation,
+    pnl: 0
+  });
+
+  renderPositions();
 }
 
-function addHistory(type, price, amount, leverage) {
-  let row = `<tr>
-    <td>${type}</td>
-    <td>${price}</td>
-    <td>${amount}</td>
-    <td>${leverage}x</td>
-  </tr>`;
-  document.getElementById("history").innerHTML += row;
+function updatePnL() {
+  positions.forEach(pos => {
+    if (pos.type === "long") {
+      pos.pnl = ((price - pos.entry) / pos.entry) * pos.margin * pos.leverage;
+    } else {
+      pos.pnl = ((pos.entry - price) / pos.entry) * pos.margin * pos.leverage;
+    }
+
+    // Liquidation Check
+    if ((pos.type === "long" && price <= pos.liquidation) ||
+        (pos.type === "short" && price >= pos.liquidation)) {
+
+      alert("Position Liquidated!");
+      positions = positions.filter(p => p !== pos);
+    }
+  });
+
+  renderPositions();
 }
 
-function toggleMode() {
-  document.body.classList.toggle("light");
+function closeTrade(index) {
+  balance += positions[index].margin + positions[index].pnl;
+  balanceEl.innerText = balance.toFixed(2);
+  positions.splice(index, 1);
+  renderPositions();
 }
 
-function checkSLTP() {
-  let sl = parseFloat(document.getElementById("sl").value);
-  let tp = parseFloat(document.getElementById("tp").value);
-
-  if (sl && price <= sl) {
-    alert("Stop Loss Hit!");
-  }
-
-  if (tp && price >= tp) {
-    alert("Take Profit Hit!");
-  }
+function renderPositions() {
+  positionsEl.innerHTML = "";
+  positions.forEach((pos, index) => {
+    positionsEl.innerHTML += `
+      <tr>
+        <td>${pos.type}</td>
+        <td>${pos.entry.toFixed(2)}</td>
+        <td>${pos.leverage}x</td>
+        <td>$${pos.margin}</td>
+        <td style="color:${pos.pnl >= 0 ? 'lime' : 'red'}">
+          $${pos.pnl.toFixed(2)}
+        </td>
+        <td>$${pos.liquidation.toFixed(2)}</td>
+        <td><button onclick="closeTrade(${index})">Close</button></td>
+      </tr>
+    `;
+  });
 }
 
-// TradingView Chart
+// TradingView Professional Chart
 new TradingView.widget({
   "width": "100%",
-  "height": 400,
+  "height": 450,
   "symbol": "BINANCE:BTCUSDT",
-  "interval": "15",
+  "interval": "5",
   "timezone": "Asia/Kolkata",
   "theme": "dark",
   "style": "1",
   "locale": "en",
-  "toolbar_bg": "#f1f3f6",
-  "enable_publishing": false,
   "allow_symbol_change": true,
   "container_id": "tv_chart"
 });
-
 </script>
 
 </body>
